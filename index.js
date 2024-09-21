@@ -49,10 +49,32 @@ app.post('/upload', upload.single('zipfile'), (req, res) => {
         });
 });
 
+// Helper function to safely get the length of a value
+const getValueLength = (value) => {
+    if (value == null) return 0; // Handle null/undefined
+    if (typeof value === 'object') return JSON.stringify(value).length; // Handle objects/arrays
+    return value.toString().length; // Handle strings and numbers
+};
+
 const convertJsonToExcel = (jsonData, res) => {
     const worksheet = xlsx.utils.json_to_sheet(jsonData);
     const workbook = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(workbook, worksheet, 'Students');
+
+    // Set column widths with proper type checking and optimized calculation
+    const colWidths = Object.keys(jsonData[0] || {}).map((key) => {
+        try {
+            const maxLength = Math.max(
+                key.length, // Header length
+                ...jsonData.slice(0, 1000).map(row => getValueLength(row[key])) // Limit to first 1000 rows to prevent large data from causing stack overflow
+            );
+            return { wch: maxLength + 2 }; // Add extra space for readability
+        } catch (error) {
+            console.error('Error calculating column width:', error);
+            return { wch: 10 }; // Default width in case of error
+        }
+    });
+    worksheet['!cols'] = colWidths;
 
     const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 
